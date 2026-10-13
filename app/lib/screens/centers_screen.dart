@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/app_store.dart';
 import '../core/theme.dart';
 import '../models/entities.dart';
+import '../widgets/centers_map.dart';
 import '../widgets/common.dart';
 import '../widgets/page_shell.dart';
 import '../widgets/editor_dialog.dart';
@@ -30,10 +31,14 @@ class _CentersScreenState extends State<CentersScreen> {
         children: [
           SearchBox('Buscar centro o zona', (v) => setState(() => query = v)),
           Tabs(const ['Lista', 'Mapa'], tab, (v) => setState(() => tab = v)),
-          if (tab == 'Mapa')
-            const Notice(
-              'Vista de ubicación por direcciones. La demostración no conecta un proveedor de mapas.',
+          if (tab == 'Mapa') ...[
+            CentersMap(
+              centers: list.toList(),
+              onSelect: (c) => showCenterSheet(context, s, c),
             ),
+            const SizedBox(height: 10),
+            const Notice('Toca un marcador para ver el centro y cómo llegar.'),
+          ],
           ...list.map(
             (e) => Panel(
               child: Column(
@@ -79,21 +84,7 @@ class _CentersScreenState extends State<CentersScreen> {
                     children: [
                       Expanded(
                         child: TextButton.icon(
-                          onPressed: () => showDialog<void>(
-                            context: context,
-                            builder: (c) => AlertDialog(
-                              title: Text(e.name),
-                              content: SelectableText(
-                                'Dirección: ${e.address}\nHorario: ${e.hours}',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(c),
-                                  child: const Text('Cerrar'),
-                                ),
-                              ],
-                            ),
-                          ),
+                          onPressed: () => openDirections(context, e),
                           icon: const Icon(Icons.directions_outlined, size: 18),
                           label: const Text('Cómo llegar'),
                         ),
@@ -121,18 +112,21 @@ class _CentersScreenState extends State<CentersScreen> {
               'Dirección',
               'Horario',
             ]);
-            if (v != null && context.mounted) {
-              s.centers.add(
-                VaccinationCenter(
-                  v['Nombre']!,
-                  v['Dirección']!,
-                  v['Horario']!,
-                  true,
-                ),
-              );
-              s.changed();
-              toast(context, 'Centro añadido');
-            }
+            if (v == null || !context.mounted) return;
+            final point = await pickLocation(context);
+            if (point == null || !context.mounted) return;
+            s.centers.add(
+              VaccinationCenter(
+                v['Nombre']!,
+                v['Dirección']!,
+                v['Horario']!,
+                true,
+                lat: point.latitude,
+                lng: point.longitude,
+              ),
+            );
+            s.changed();
+            toast(context, 'Centro añadido');
           }, icon: Icons.add_circle_outline),
         ],
       ),

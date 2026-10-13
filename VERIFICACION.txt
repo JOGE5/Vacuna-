@@ -1,7 +1,9 @@
-Flutter 3.35.4 / Dart 3.9.2
+Flutter 3.44.9 / Dart 3.12.2
 flutter analyze: No issues found.
-flutter test --concurrency=1: 23 pruebas aprobadas.
+flutter test --concurrency=1: 30 pruebas aprobadas (13 de app_test.dart y 17 de capturas).
 flutter build web: compilación aprobada.
-Ancho móvil comprobado: 390 px, 16 rutas.
-Capturas: 17 PNG renderizados por Flutter.
-No se compiló un APK ni se hizo comparación automatizada píxel por píxel con el PDF.
+flutter build apk --debug: compilación aprobada.
+Ancho móvil comprobado: 390 px, 17 rutas; sin desbordes a 320 y 360 px con texto normal.
+Capturas: 17 PNG renderizados por Flutter (sin la vista ciudadana ni el mapa).
+Base de datos local (supabase/, Supabase CLI 2.120.0): migración y datos de ejemplo aplicados; 22 comprobaciones por la API (permisos de invitado, ciudadano y personal; registrar_vacunacion).
+No se hizo comparación automatizada píxel por píxel con el PDF.

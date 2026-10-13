@@ -64,7 +64,9 @@ class Panel extends StatelessWidget {
         ),
       ],
     ),
-    child: child,
+    // Material transparente para que ListTile/InkWell muestren el efecto táctil
+    // sobre el fondo blanco del panel.
+    child: Material(type: MaterialType.transparency, child: child),
   );
 }
 

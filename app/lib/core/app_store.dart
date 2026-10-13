@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/entities.dart';
+import 'auth_service.dart';
 
 class AppStore extends ChangeNotifier {
+  final AuthService auth;
   final campaigns = <Campaign>[
     Campaign(
       name: 'Campaña Influenza 2026',
-      vaccine: 'Influenza tetravalente',
+      vaccine: 'Influenza estacional',
       center: 'Centro San Martín',
       start: DateTime(2026, 10, 6),
       end: DateTime(2026, 10, 30),
@@ -67,28 +69,47 @@ class AppStore extends ChangeNotifier {
       'Av. Arce 1250, La Paz',
       'Lun–Vie · 08:00–17:00',
       true,
+      lat: -16.5095,
+      lng: -68.1255,
     ),
     VaccinationCenter(
       'Centro Norte',
       'Av. Busch 740, La Paz',
       'Lun–Sáb · 09:00–16:00',
       true,
+      lat: -16.4960,
+      lng: -68.1195,
     ),
     VaccinationCenter(
       'Centro Sur',
       'Calle 21 de Calacoto 88, La Paz',
       'Lun–Vie · 08:00–15:00',
       false,
+      lat: -16.5415,
+      lng: -68.0775,
     ),
   ];
   final users = <AppUser>[
-    AppUser('Ana Torres', 'ana.torres@example.com', 'Personal de salud', true),
-    AppUser('Carlos Rojas', 'carlos.rojas@example.com', 'Administrador', true),
+    AppUser(
+      'Ana Torres',
+      'ana.torres@example.com',
+      'Personal de salud',
+      true,
+      id: 'ana-torres',
+    ),
+    AppUser(
+      'Carlos Rojas',
+      'carlos.rojas@example.com',
+      'Administrador',
+      true,
+      id: 'carlos-rojas',
+    ),
     AppUser(
       'Elena Vargas',
       'elena.vargas@example.com',
       'Personal de salud',
       false,
+      id: 'elena-vargas',
     ),
   ];
   final vaccinations = <Vaccination>[];
@@ -96,7 +117,8 @@ class AppStore extends ChangeNotifier {
   Patient? selectedPatient;
   Campaign? selectedCampaign;
   bool notifications = true;
-  AppStore() {
+  AppUser? _session;
+  AppStore({this.auth = const LocalAuthService()}) {
     selectedPatient = patients.first;
     selectedCampaign = campaigns.first;
     vaccinations.addAll([
@@ -120,6 +142,50 @@ class AppStore extends ChangeNotifier {
       ),
     ]);
   }
+  // Roles de la vista ciudadana; los demás son del personal de salud.
+  static const citizenRole = 'Ciudadano', guestRole = 'Invitado';
+  bool get signedIn => _session != null;
+  bool get isGuest => _session?.role == guestRole;
+  // Sin sesión (rutas abiertas directamente en pruebas) se muestra el primer usuario.
+  AppUser get currentUser => _session ?? users.first;
+
+  Future<void> signIn(String email, String password) async {
+    final user = await auth.signIn(email, password);
+    // La cuenta se reconoce por su id, que no cambia si se edita el correo.
+    final existing = users.where(
+      (u) => user.id.isNotEmpty
+          ? u.id == user.id
+          : u.email.toLowerCase() == user.email.toLowerCase(),
+    );
+    if (existing.isNotEmpty && !existing.first.active) {
+      await auth.signOut();
+      throw const AuthException(
+        'Tu usuario está inactivo. Contacta a un administrador.',
+      );
+    }
+    if (existing.isEmpty) users.add(user);
+    _session = existing.isEmpty ? user : existing.first;
+    notifyListeners();
+  }
+
+  void enterAsGuest() {
+    _session = AppUser('Invitado', '', guestRole, true);
+    notifyListeners();
+  }
+
+  // Los ciudadanos no se agregan a la lista de usuarios del personal.
+  Future<void> signInWithGoogle() async {
+    final user = await auth.signInWithGoogle();
+    _session = user..role = citizenRole;
+    notifyListeners();
+  }
+
+  Future<void> signOut() async {
+    await auth.signOut();
+    _session = null;
+    notifyListeners();
+  }
+
   void changed() => notifyListeners();
   void addPatient(Patient p) {
     patients.add(p);

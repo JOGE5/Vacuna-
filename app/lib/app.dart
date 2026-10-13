@@ -17,6 +17,7 @@ import 'screens/reports_screen.dart';
 import 'screens/users_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/more_screen.dart';
+import 'screens/citizen_home_screen.dart';
 
 class VacunaPlusApp extends StatefulWidget {
   const VacunaPlusApp({super.key, this.initialRoute = '/', this.store});
@@ -59,6 +60,7 @@ class _VacunaPlusAppState extends State<VacunaPlusApp> {
         '/users': (c) => const UsersScreen(),
         '/profile': (c) => const ProfileScreen(),
         '/more': (c) => const MoreScreen(),
+        '/explorar': (c) => const CitizenHomeScreen(),
       },
     ),
   );

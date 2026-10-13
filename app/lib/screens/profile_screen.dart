@@ -9,7 +9,7 @@ class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    final s = StoreScope.of(context), u = s.users.first;
+    final s = StoreScope.of(context), u = s.currentUser;
     void info(String title, String text) => showDialog<void>(
       context: context,
       builder: (c) => AlertDialog(
@@ -172,8 +172,12 @@ class ProfileScreen extends StatelessWidget {
           ]),
           Panel(
             child: TextButton.icon(
-              onPressed: () =>
-                  Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false),
+              onPressed: () async {
+                await s.signOut();
+                if (context.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+                }
+              },
               icon: const Icon(Icons.logout, color: Colors.red),
               label: const Text(
                 'Cerrar sesión',

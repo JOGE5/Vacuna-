@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Mosaicos del mapa (y Supabase); Flutter solo lo agrega en depuración. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="flutter_application_1"
+        android:label="VacunaPlus"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -40,6 +42,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- «Cómo llegar» abre Google Maps o el navegador (url_launcher). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

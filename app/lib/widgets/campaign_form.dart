@@ -98,7 +98,7 @@ class _CampaignFormState extends State<CampaignForm> {
                     SelectField(
                       'Vacuna',
                       const [
-                        'Influenza tetravalente',
+                        'Influenza estacional',
                         'SRP',
                         'Hepatitis B',
                         'COVID-19',

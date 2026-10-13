@@ -15,8 +15,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.flutter_application_1"
+        // También identifica la app ante el servidor de mapas (mapUserAgent en
+        // lib/widgets/centers_map.dart); si se cambia, cambiar ambos.
+        applicationId = "com.vacunaplus.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

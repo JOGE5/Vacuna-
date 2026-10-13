@@ -60,14 +60,29 @@ class Stock {
 }
 
 class VaccinationCenter {
-  VaccinationCenter(this.name, this.address, this.hours, this.open);
+  VaccinationCenter(
+    this.name,
+    this.address,
+    this.hours,
+    this.open, {
+    required this.lat,
+    required this.lng,
+  });
   String name, address, hours;
   bool open;
+  double lat, lng;
 }
 
 class AppUser {
-  AppUser(this.name, this.email, this.role, this.active);
+  AppUser(this.name, this.email, this.role, this.active, {this.id = ''});
+  // Identificador de la cuenta de acceso; vacío si el usuario no tiene credenciales.
+  final String id;
   String name, email, role;
   bool active;
-  String get initials => name.split(' ').map((e) => e[0]).take(2).join();
+  String get initials => name
+      .split(' ')
+      .where((e) => e.isNotEmpty)
+      .map((e) => e[0])
+      .take(2)
+      .join();
 }

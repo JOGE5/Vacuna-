@@ -19,10 +19,10 @@ class DashboardScreen extends StatelessWidget {
           gap,
           Row(
             children: [
-              const CircleMark(text: 'A'),
+              CircleMark(text: s.currentUser.initials),
               const SizedBox(width: 12),
               Text(
-                'Hola, ${s.users.first.name.split(' ').first}',
+                'Hola, ${s.currentUser.name.split(' ').first}',
                 style: const TextStyle(
                   fontSize: 21,
                   fontWeight: FontWeight.bold,

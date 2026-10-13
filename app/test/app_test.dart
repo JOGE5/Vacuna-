@@ -2,10 +2,13 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_application_1/app.dart';
 import 'package:flutter_application_1/core/app_store.dart';
+import 'package:flutter_application_1/core/auth_service.dart';
 import 'package:flutter_application_1/core/validators.dart';
 import 'package:flutter_application_1/models/entities.dart';
+import 'package:flutter_application_1/widgets/centers_map.dart';
 
 void main() {
   setUpAll(() async {
@@ -19,6 +22,16 @@ void main() {
     );
     await fonts.load();
   });
+  // Sin caché en disco; en pruebas los mosaicos fallan como si no hubiera internet.
+  setUp(
+    () => mapTileProvider = () => NetworkTileProvider(
+      cachingProvider: const DisabledMapCachingProvider(),
+    ),
+  );
+  Finder markers() => find.descendant(
+    of: find.byType(MarkerLayer),
+    matching: find.byIcon(Icons.location_on),
+  );
 
   test('Validadores: correo, contraseña, documento, teléfono y cantidades', () {
     expect(Validators.email('ana@example.com'), isNull);
@@ -60,6 +73,62 @@ void main() {
     expect(s.movements, isNotEmpty);
     s.dispose();
   });
+  test(
+    'Credenciales locales: acceso, rechazo, usuario inactivo y salida',
+    () async {
+      final s = AppStore();
+      expect(s.signedIn, isFalse);
+      await expectLater(
+        s.signIn('ana.torres@example.com', 'incorrecta'),
+        throwsA(isA<AuthException>()),
+      );
+      await expectLater(
+        s.signIn('nadie@example.com', 'salud123'),
+        throwsA(isA<AuthException>()),
+      );
+      await expectLater(
+        s.signIn('elena.vargas@example.com', 'salud123'),
+        throwsA(
+          isA<AuthException>().having(
+            (e) => e.message,
+            'message',
+            contains('inactivo'),
+          ),
+        ),
+      );
+      expect(s.signedIn, isFalse);
+      await s.signIn(' Carlos.Rojas@example.com ', 'admin123');
+      expect(s.signedIn, isTrue);
+      expect(s.currentUser.name, 'Carlos Rojas');
+      expect(s.currentUser, same(s.users[1]));
+      await s.signOut();
+      expect(s.signedIn, isFalse);
+      s.dispose();
+    },
+  );
+  test('La cuenta se reconoce aunque se edite su correo', () async {
+    final s = AppStore();
+    await s.signIn('ana.torres@example.com', 'salud123');
+    s.currentUser.email = 'ana@hospital.bo';
+    await s.signOut();
+    await s.signIn('ana.torres@example.com', 'salud123');
+    expect(s.users.length, 3);
+    expect(s.currentUser, same(s.users.first));
+    s.users[1]
+      ..active = false
+      ..email = 'carlos@hospital.bo';
+    await expectLater(
+      s.signIn('carlos.rojas@example.com', 'admin123'),
+      throwsA(isA<AuthException>()),
+    );
+    s.dispose();
+  });
+  test('Las iniciales toleran espacios dobles', () {
+    expect(
+      AppUser('Luis  Paz', 'luis@example.com', 'Rol', true).initials,
+      'LP',
+    );
+  });
   testWidgets(
     'Login bloquea campos vacíos y permite navegación con datos válidos',
     (tester) async {
@@ -75,9 +144,13 @@ void main() {
       expect(find.text('Usa al menos 6 caracteres'), findsOneWidget);
       await tester.enterText(
         find.byType(TextFormField).at(0),
-        'ana@example.com',
+        'ana.torres@example.com',
       );
-      await tester.enterText(find.byType(TextFormField).at(1), '123456');
+      await tester.enterText(find.byType(TextFormField).at(1), 'otraclave');
+      await tester.tap(find.text('Ingresar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Correo o contraseña incorrectos'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).at(1), 'salud123');
       await tester.tap(find.text('Ingresar'));
       await tester.pumpAndSettle();
       expect(find.text('Hola, Ana'), findsOneWidget);
@@ -131,7 +204,7 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('Las 16 rutas se presentan en una pantalla móvil de 390 px', (
+  testWidgets('Las 17 rutas se presentan en una pantalla móvil de 390 px', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -155,6 +228,7 @@ void main() {
       '/users',
       '/profile',
       '/more',
+      '/explorar',
     ]) {
       await tester.pumpWidget(
         VacunaPlusApp(key: ValueKey(route), initialRoute: route),
@@ -162,5 +236,92 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: route);
     }
+  });
+  test('Cómo llegar abre la ruta de Google Maps hacia el centro', () {
+    final c = AppStore().centers.first;
+    expect(
+      directionsUri(c).toString(),
+      'https://www.google.com/maps/dir/?api=1&destination=-16.5095%2C-68.1255',
+    );
+  });
+  testWidgets(
+    'Invitado: mapa sin internet, filtro por vacuna y ficha del centro',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(const VacunaPlusApp());
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Entrar como invitado'));
+      await tester.tap(find.text('Entrar como invitado'));
+      await tester.pumpAndSettle();
+      expect(find.text('Hola, invitado'), findsOneWidget);
+      expect(markers(), findsNWidgets(3));
+      expect(find.textContaining('Sin conexión'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ChoiceChip, 'SRP'));
+      await tester.pumpAndSettle();
+      expect(markers(), findsOneWidget);
+      await tester.tap(markers());
+      await tester.pumpAndSettle();
+      expect(find.text('Centro Sur'), findsWidgets);
+      expect(find.text('Cómo llegar'), findsOneWidget);
+      expect(find.text('Vacunas disponibles'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets('Google sin Supabase avisa y no inicia sesión', (tester) async {
+    tester.view.physicalSize = const Size(390, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final s = AppStore();
+    await tester.pumpWidget(VacunaPlusApp(store: s));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Supabase'), findsOneWidget);
+    expect(s.signedIn, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Centros: mapa y nuevo centro con ubicación marcada', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final s = AppStore();
+    await tester.pumpWidget(VacunaPlusApp(initialRoute: '/centers', store: s));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mapa'));
+    await tester.pumpAndSettle();
+    expect(markers(), findsNWidgets(3));
+    await tester.ensureVisible(find.text('Añadir centro').first);
+    await tester.tap(find.text('Añadir centro').first);
+    await tester.pumpAndSettle();
+    for (final (i, text) in [
+      'Centro El Alto',
+      'Av. 6 de Marzo 100',
+      'Lun–Vie',
+    ].indexed) {
+      await tester.enterText(find.byType(TextFormField).at(i), text);
+    }
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('Ubicación del centro'), findsOneWidget);
+    await tester.tap(find.byType(FlutterMap));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(markers(), findsOneWidget);
+    await tester.tap(find.text('Guardar ubicación'));
+    await tester.pumpAndSettle();
+    expect(find.text('Centro añadido'), findsOneWidget);
+    expect(s.centers.length, 4);
+    expect(s.centers.last.lat, closeTo(-16.5, 0.1));
+    expect(s.centers.last.lng, closeTo(-68.12, 0.1));
+    expect(tester.takeException(), isNull);
   });
 }
