@@ -72,7 +72,7 @@ class SupabaseAuthService implements AuthService {
   /// En web, OAuth redirige el navegador y la sesión se recibe después.
   /// El listener del AppStore completa el acceso al volver de Google.
   @override
-  Future<AppUser?> signInWithGoogle() async {
+  Future<AppUser> signInWithGoogle() async {
     try {
       final started = await _client.auth.signInWithOAuth(
         OAuthProvider.google,
@@ -81,7 +81,8 @@ class SupabaseAuthService implements AuthService {
       if (!started) {
         throw const AuthException('No se pudo abrir el inicio de sesión con Google.');
       }
-      return null;
+      // OAuth web regresa de forma asíncrona; la sesión se procesa al volver.
+      return AppUser('Iniciando sesión', '', 'Ciudadano', true);
     } on AuthException {
       rethrow;
     } on AuthApiException catch (e) {
