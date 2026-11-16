@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
 import 'app.dart';
+import 'core/supabase_config.dart';
 
-void main() => runApp(const VacunaPlusApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await VacunaSupabase.initialize();
+  runApp(const VacunaPlusApp());
+}
