@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/app_store.dart';
 import '../core/auth_service.dart';
+import '../core/supabase_auth_service.dart';
 import '../core/theme.dart';
 import '../core/validators.dart';
 import '../widgets/common.dart';
@@ -18,8 +19,38 @@ class _LoginScreenState extends State<LoginScreen> {
   final email = TextEditingController(), password = TextEditingController();
   bool hidden = true, loading = false;
   String? error;
+  AppStore? _observedStore;
+  bool _redirecting = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final store = StoreScope.of(context);
+    if (identical(_observedStore, store)) return;
+    _observedStore?.removeListener(_onAuthChanged);
+    _observedStore = store;
+    if (store.auth is SupabaseAuthService) {
+      store.addListener(_onAuthChanged);
+      _onAuthChanged();
+    }
+  }
+
+  void _onAuthChanged() {
+    final store = _observedStore;
+    if (!mounted || store == null || !store.signedIn || _redirecting) return;
+    if (store.isGuest) return;
+    _redirecting = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final route = store.currentUser.role == AppStore.citizenRole
+          ? '/explorar'
+          : '/home';
+      Navigator.pushNamedAndRemoveUntil(context, route, (_) => false);
+    });
+  }
   @override
   void dispose() {
+    _observedStore?.removeListener(_onAuthChanged);
     email.dispose();
     password.dispose();
     super.dispose();
@@ -34,7 +65,9 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await s.signIn(email.text, password.text);
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (r) => false);
+      if (s.auth is! SupabaseAuthService) {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (r) => false);
+      }
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
     } finally {
@@ -48,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _google(AppStore s) async {
     try {
       await s.signInWithGoogle();
-      if (mounted) _openCitizenView();
+      // Supabase OAuth vuelve por redirect; AppStore detecta la sesión.
     } on AuthException catch (e) {
       if (mounted) toast(context, e.message);
     }
