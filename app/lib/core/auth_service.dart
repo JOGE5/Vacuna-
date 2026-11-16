@@ -17,7 +17,7 @@ abstract class AuthService {
 
   /// Acceso de ciudadanos con su cuenta de Google (vista de puntos de
   /// vacunación). Devuelve el usuario o lanza [AuthException].
-  Future<AppUser> signInWithGoogle();
+  Future<AppUser?> signInWithGoogle();
   Future<void> signOut();
 }
 
