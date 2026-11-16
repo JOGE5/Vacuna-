@@ -28,3 +28,17 @@ Para acceder con correo y contraseña, el usuario debe existir en Supabase Auth 
 - Los módulos de campañas, pacientes e inventario siguen utilizando listas locales. Esta rama solo implementa el sistema de autenticación.
 - OAuth en Android/iOS requiere añadir los esquemas de retorno/deep linking y registrar los clientes móviles de Google.
 - `flutter analyze`, 30 pruebas funcionales, 18 pruebas de capturas y `flutter build web --release` se verificaron en la integración local. El flujo OAuth requiere la configuración externa indicada arriba y una prueba manual en Brave.
+
+
+## Presentación en laptop y compatibilidad Android
+
+El inicio con Google en Chrome usa la URL de Supabase `https://eupodocpqoedinvpdgxk.supabase.co/auth/v1/callback` como URI de redirección en Google Cloud. Para la prueba local se mantiene `http://localhost:41287/**` en Supabase → Authentication → URL Configuration.
+
+La integración Android se conserva sin alterar la presentación web:
+- `AndroidManifest.xml` admite el deep link `io.supabase.vacunaplus://login-callback/`.
+- Agregar `io.supabase.vacunaplus://login-callback/` a **Additional Redirect URLs** en Supabase para probar Android.
+- Configurar Google en Supabase con credenciales OAuth válidas antes de pulsar «Continuar con Google».
+- Para revisar en laptop: `flutter run -d chrome --web-port 41287`.
+- Para una prueba Android: `flutter devices` y `flutter run -d <ID_ANDROID>`.
+
+La base funcional se mantiene en `main`; no se reemplazaron los módulos de turnos, campañas, inventario ni las pruebas aportadas por otros colaboradores.
