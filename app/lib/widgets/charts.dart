@@ -16,13 +16,13 @@ class TrendChart extends StatelessWidget {
       const Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('Lun', style: TextStyle(fontSize: 10)),
-          Text('Mar', style: TextStyle(fontSize: 10)),
-          Text('Mié', style: TextStyle(fontSize: 10)),
-          Text('Jue', style: TextStyle(fontSize: 10)),
-          Text('Vie', style: TextStyle(fontSize: 10)),
-          Text('Sáb', style: TextStyle(fontSize: 10)),
-          Text('Dom', style: TextStyle(fontSize: 10)),
+          Text('Lun', style: TextStyle(fontSize: 12)),
+          Text('Mar', style: TextStyle(fontSize: 12)),
+          Text('Mié', style: TextStyle(fontSize: 12)),
+          Text('Jue', style: TextStyle(fontSize: 12)),
+          Text('Vie', style: TextStyle(fontSize: 12)),
+          Text('Sáb', style: TextStyle(fontSize: 12)),
+          Text('Dom', style: TextStyle(fontSize: 12)),
         ],
       ),
     ],
@@ -77,59 +77,74 @@ class _TrendPainter extends CustomPainter {
 }
 
 class WeeklyBars extends StatelessWidget {
-  const WeeklyBars({super.key, this.values = const [100, 120, 110, 150]});
+  const WeeklyBars({super.key, required this.values});
   final List<int> values;
+
+  static List<int> axisTicks(int maximum) {
+    if (maximum < 4) {
+      return [for (var value = maximum; value >= 0; value--) value];
+    }
+    final step = (maximum + 3) ~/ 4;
+    return [
+      for (var multiplier = 4; multiplier >= 0; multiplier--) step * multiplier,
+    ];
+  }
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 160,
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        const SizedBox(
-          width: 24,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('200', style: TextStyle(fontSize: 10)),
-              Text('150', style: TextStyle(fontSize: 10)),
-              Text('100', style: TextStyle(fontSize: 10)),
-              Text('50', style: TextStyle(fontSize: 10)),
-              Text('0', style: TextStyle(fontSize: 10)),
-            ],
-          ),
-        ),
-        ...List.generate(
-          values.length,
-          (i) => Expanded(
+  Widget build(BuildContext context) {
+    final maxValue = values.fold<int>(1, (a, b) => b > a ? b : a);
+    final ticks = axisTicks(maxValue);
+    final scale = ticks.first;
+    return SizedBox(
+      height: 160,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          SizedBox(
+            width: 24,
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '${values[i]}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: green,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  height: values[i] * .68,
-                  margin: const EdgeInsets.symmetric(horizontal: 9),
-                  decoration: BoxDecoration(
-                    color: i == 3 ? ink : green.withValues(alpha: .5 + i * .12),
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(5),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text('Semana ${i + 1}', style: const TextStyle(fontSize: 10)),
+                for (final tick in ticks)
+                  Text('$tick', style: const TextStyle(fontSize: 12)),
               ],
             ),
           ),
-        ),
-      ],
-    ),
-  );
+          ...List.generate(
+            values.length,
+            (i) => Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    '${values[i]}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: green,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    height: values[i] / scale * 100,
+                    margin: const EdgeInsets.symmetric(horizontal: 9),
+                    decoration: BoxDecoration(
+                      color: i == 3
+                          ? ink
+                          : green.withValues(alpha: .5 + i * .12),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(5),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text('Semana ${i + 1}', style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

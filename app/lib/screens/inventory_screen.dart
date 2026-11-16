@@ -5,6 +5,7 @@ import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
 import '../widgets/page_shell.dart';
 import '../widgets/editor_dialog.dart';
+import '../models/entities.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -41,13 +42,21 @@ class _InventoryScreenState extends State<InventoryScreen> {
             children: [
               _stat(
                 'Dosis disponibles',
-                '${s.stocks.fold<int>(0, (n, e) => n + e.quantity)}',
+                '${s.availableStocks.fold<int>(0, (n, e) => n + e.quantity)}',
                 Icons.medication_outlined,
               ),
               const SizedBox(width: 8),
-              _stat('Existencias bajas', '3', Icons.warning_amber),
+              _stat(
+                'Existencias bajas',
+                '${s.lowStockCount}',
+                Icons.warning_amber,
+              ),
               const SizedBox(width: 8),
-              _stat('Lotes por vencer', '2', Icons.calendar_month_outlined),
+              _stat(
+                'Lotes por vencer',
+                '${s.expiringStockCount}',
+                Icons.calendar_month_outlined,
+              ),
             ],
           ),
           SearchBox('Buscar vacuna o lote', (v) => setState(() => query = v)),
@@ -75,25 +84,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ...list.map(
             (e) => Panel(
               child: InkWell(
-                onTap: () => showDialog<void>(
-                  context: context,
-                  builder: (c) => AlertDialog(
-                    title: Text(e.vaccine),
-                    content: Text(
-                      'Lote: ${e.lot}\nCentro: ${e.center}\n${e.quantity} dosis\nVence: ${shortDate(e.expiry)}',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(c),
-                        child: const Text('Cerrar'),
-                      ),
-                    ],
-                  ),
-                ),
+                onTap: () => _showStock(s, e),
                 child: Row(
                   children: [
                     CircleMark(
-                      icon: e.vaccine == 'SRP'
+                      icon: s.isExpired(e)
                           ? Icons.warning_amber
                           : Icons.vaccines_outlined,
                     ),
@@ -111,18 +106,42 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             style: const TextStyle(fontSize: 12, color: muted),
                           ),
                           Text(
-                            '${e.quantity} dosis',
-                            style: const TextStyle(
+                            e.withdrawn
+                                ? 'Retirado · ${e.quantity} dosis no disponibles'
+                                : s.isExpired(e)
+                                ? 'Vencido · ${e.quantity} dosis no disponibles'
+                                : '${e.quantity} dosis',
+                            style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: green,
+                              color: s.isExpired(e) || e.withdrawn
+                                  ? Theme.of(context).colorScheme.error
+                                  : green,
                             ),
                           ),
+                          if (!e.withdrawn &&
+                              !s.isExpired(e) &&
+                              e.quantity > 0) ...[
+                            Text(
+                              s.forecast(e).days == null
+                                  ? 'Sin consumo reciente'
+                                  : 'Alcanza para ${s.forecast(e).days} días al ritmo actual',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            if (s.forecast(e).atRisk > 0)
+                              Text(
+                                'Se vencerían ~${s.forecast(e).atRisk} dosis: considera trasladarlas o adelantar la campaña',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                          ],
                         ],
                       ),
                     ),
                     Text(
                       'Vence\n${shortDate(e.expiry)}',
-                      style: const TextStyle(fontSize: 11, color: muted),
+                      style: const TextStyle(fontSize: 12, color: muted),
                     ),
                     const Icon(Icons.chevron_right, size: 18),
                   ],
@@ -131,8 +150,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
           ),
           if (list.isEmpty) const Notice('No hay lotes para estos filtros'),
-          const Notice('Existencias bajas: SRP', warning: true),
-          const Notice('Vencimiento próximo: lote SRP-2602', warning: true),
+          if (s.lowStockCount > 0)
+            Notice(
+              'Existencias bajas: ${s.lowStockCount} lotes',
+              warning: true,
+            ),
+          if (s.expiringStockCount > 0)
+            Notice('Lotes por vencer: ${s.expiringStockCount}', warning: true),
           Row(
             children: [
               Expanded(
@@ -194,6 +218,91 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
+  Future<void> _showStock(AppStore s, Stock stock) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, refresh) => AlertDialog(
+          title: Text('${stock.vaccine} · ${stock.lot}'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Centro: ${stock.center}\n${stock.quantity} dosis\nVence: ${shortDate(stock.expiry)}',
+                ),
+                if (stock.withdrawn) ...[
+                  gap,
+                  Text(
+                    'Retirado: ${stock.withdrawalReason}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  gap,
+                  const Text(
+                    'Pacientes afectados',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  if (s.affectedBy(stock).isEmpty)
+                    const Text('No hay pacientes registrados con este lote.'),
+                  for (final v in s.affectedBy(stock))
+                    Text(
+                      '${v.patient.name} · ${v.patient.document} · ${shortDate(v.date)}',
+                    ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            if (!stock.withdrawn)
+              TextButton(
+                onPressed: () async {
+                  var reason = '';
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('Retirar lote'),
+                      content: TextField(
+                        onChanged: (value) => reason = value,
+                        decoration: const InputDecoration(
+                          labelText: 'Motivo del retiro',
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Cancelar'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            if (reason.trim().isEmpty) {
+                              toast(c, 'Indica el motivo');
+                              return;
+                            }
+                            Navigator.pop(c, true);
+                          },
+                          child: const Text('Confirmar retiro'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    s.withdrawStock(stock, reason);
+                    refresh(() {});
+                  }
+                },
+                child: const Text('Retirar lote'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _stat(String label, String value, IconData icon) => Expanded(
     child: Panel(
       padding: 10,
@@ -203,7 +312,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           Text(
             label,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11),
+            style: const TextStyle(fontSize: 12),
           ),
           Text(
             value,

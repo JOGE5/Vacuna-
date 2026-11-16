@@ -25,6 +25,7 @@ class _PatientListScreenState extends State<PatientListScreen> {
       title: 'Pacientes',
       actions: [
         IconButton(
+          tooltip: 'Agregar paciente',
           onPressed: () => go(context, '/patient/new'),
           icon: const Icon(Icons.person_add_outlined),
         ),
@@ -37,7 +38,7 @@ class _PatientListScreenState extends State<PatientListScreen> {
               const CircleMark(icon: Icons.people_outline),
               const SizedBox(width: 10),
               Text(
-                '${128 + s.patients.length - 3}',
+                '${s.patients.length}',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 20,

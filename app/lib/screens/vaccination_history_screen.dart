@@ -17,6 +17,8 @@ class _VaccinationHistoryScreenState extends State<VaccinationHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final s = StoreScope.of(context), p = s.selectedPatient!;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final list = s.vaccinations.where(
       (v) =>
           v.patient == p &&
@@ -24,6 +26,16 @@ class _VaccinationHistoryScreenState extends State<VaccinationHistoryScreen> {
             query.toLowerCase(),
           ),
     );
+    final appointments =
+        s.vaccinations
+            .where(
+              (v) =>
+                  v.patient == p &&
+                  v.next != null &&
+                  !v.next!.isBefore(today),
+            )
+            .toList()
+          ..sort((a, b) => a.next!.compareTo(b.next!));
     final text =
         'VacunaPlus · ${p.name} · ${p.document}\n${list.map((v) => '${v.vaccine} · ${v.dose} · ${shortDate(v.date)} · ${v.lot} · ${v.center}').join('\n')}';
     return PageShell(
@@ -57,7 +69,10 @@ class _VaccinationHistoryScreenState extends State<VaccinationHistoryScreen> {
               ],
             ),
           ),
-          const Notice('Próxima cita\n◷ 09:30  |  ⌖ Centro San Martín'),
+          if (appointments.isNotEmpty)
+            Notice(
+              'Próxima cita: ${shortDate(appointments.first.next!)} · ${appointments.first.center}',
+            ),
           const Text(
             'Historial de vacunación',
             style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
@@ -91,18 +106,15 @@ class _VaccinationHistoryScreenState extends State<VaccinationHistoryScreen> {
                               ),
                               StatusBadge(v.dose),
                               const SizedBox(height: 6),
-                              Text(
-                                '▦ ${shortDate(v.date)}',
-                                style: const TextStyle(color: muted),
+                              _detail(
+                                Icons.calendar_today_outlined,
+                                shortDate(v.date),
                               ),
-                              Text(
-                                '◇ Lote ${v.lot}',
-                                style: const TextStyle(color: muted),
+                              _detail(
+                                Icons.inventory_2_outlined,
+                                'Lote ${v.lot}',
                               ),
-                              Text(
-                                '⌂ ${v.center}',
-                                style: const TextStyle(color: muted),
-                              ),
+                              _detail(Icons.location_on_outlined, v.center),
                             ],
                           ),
                         ),
@@ -160,4 +172,14 @@ class _VaccinationHistoryScreenState extends State<VaccinationHistoryScreen> {
       ),
     );
   }
+
+  Widget _detail(IconData icon, String text) => Row(
+    children: [
+      Icon(icon, size: 16, color: muted),
+      const SizedBox(width: 4),
+      Flexible(
+        child: Text(text, style: const TextStyle(color: muted)),
+      ),
+    ],
+  );
 }

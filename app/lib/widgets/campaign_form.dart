@@ -19,7 +19,6 @@ class _CampaignFormState extends State<CampaignForm> {
       description = TextEditingController(),
       goal = TextEditingController();
   String? vaccine, target, center, responsible;
-  String status = 'Activa';
   DateTime? start, end;
   Campaign? original;
   bool loaded = false;
@@ -37,7 +36,6 @@ class _CampaignFormState extends State<CampaignForm> {
         target = c.target;
         center = c.center;
         responsible = c.responsible;
-        status = c.status;
         start = c.start;
         end = c.end;
       }
@@ -117,13 +115,6 @@ class _CampaignFormState extends State<CampaignForm> {
                       (v) => setState(() => target = v),
                     ),
                   ),
-                  if (widget.edit)
-                    SelectField(
-                      'Estado',
-                      const ['Activa', 'Próxima', 'Finalizada'],
-                      status,
-                      (v) => setState(() => status = v!),
-                    ),
                 ],
               ),
             ),
@@ -216,7 +207,6 @@ class _CampaignFormState extends State<CampaignForm> {
                     start: start!,
                     end: end!,
                     goal: int.parse(goal.text),
-                    status: status,
                     applied: original?.applied ?? 0,
                   ),
                   original,

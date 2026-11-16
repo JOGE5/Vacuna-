@@ -13,7 +13,7 @@ class VacunaSupabase {
   );
 
   static Future<void> initialize() async {
-    await Supabase.initialize(url: url, anonKey: publishableKey);
+    await Supabase.initialize(url: url, publishableKey: publishableKey);
   }
 
   static SupabaseClient get client => Supabase.instance.client;

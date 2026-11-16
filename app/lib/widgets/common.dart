@@ -1,7 +1,27 @@
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
+import '../core/app_store.dart';
 
 const gap = SizedBox(height: 12);
+
+class ThemeIllustration extends StatelessWidget {
+  const ThemeIllustration(this.asset, {super.key, this.height, this.width});
+  final String asset;
+  final double? height, width;
+  @override
+  Widget build(BuildContext context) {
+    final image = Image.asset(
+      asset,
+      height: height,
+      width: width,
+      fit: BoxFit.contain,
+    );
+    return StoreScope.of(context).darkMode
+        ? ColorFiltered(colorFilter: darkColorFilter, child: image)
+        : image;
+  }
+}
+
 String dateLabel(DateTime d) =>
     '${d.day} ${['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][d.month - 1]} ${d.year}';
 String shortDate(DateTime d) =>
@@ -134,7 +154,7 @@ class ActionButton extends StatelessWidget {
     this.outlined = false,
   });
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final IconData icon;
   final bool outlined;
   @override

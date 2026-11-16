@@ -18,6 +18,7 @@ import 'screens/users_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/more_screen.dart';
 import 'screens/citizen_home_screen.dart';
+import 'screens/appointments_screen.dart';
 
 class VacunaPlusApp extends StatefulWidget {
   const VacunaPlusApp({super.key, this.initialRoute = '/', this.store});
@@ -42,6 +43,9 @@ class _VacunaPlusAppState extends State<VacunaPlusApp> {
       title: 'VacunaPlus',
       debugShowCheckedModeBanner: false,
       theme: appTheme(),
+      builder: (context, child) => StoreScope.of(context).darkMode
+          ? ColorFiltered(colorFilter: darkColorFilter, child: child!)
+          : child!,
       initialRoute: widget.initialRoute,
       routes: {
         '/': (c) => const LoginScreen(),
@@ -57,10 +61,12 @@ class _VacunaPlusAppState extends State<VacunaPlusApp> {
         '/inventory': (c) => const InventoryScreen(),
         '/centers': (c) => const CentersScreen(),
         '/reports': (c) => const ReportsScreen(),
-        '/users': (c) => const UsersScreen(),
+        '/users': (c) =>
+            store.isAdmin ? const UsersScreen() : const MoreScreen(),
         '/profile': (c) => const ProfileScreen(),
         '/more': (c) => const MoreScreen(),
         '/explorar': (c) => const CitizenHomeScreen(),
+        '/turnos': (c) => const AppointmentsScreen(),
       },
     ),
   );

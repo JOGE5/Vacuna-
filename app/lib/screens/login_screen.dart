@@ -95,10 +95,9 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           const Brand(large: true),
           const SizedBox(height: 14),
-          Image.asset(
+          const ThemeIllustration(
             'assets/images/equipo_medico.png',
             height: 210,
-            fit: BoxFit.contain,
           ),
           const Text(
             'Cuidamos juntos',
@@ -131,6 +130,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
+                        tooltip: hidden
+                            ? 'Mostrar contraseña'
+                            : 'Ocultar contraseña',
                         onPressed: () => setState(() => hidden = !hidden),
                         icon: Icon(
                           hidden

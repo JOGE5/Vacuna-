@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_application_1/app.dart';
+import 'package:flutter_application_1/core/app_store.dart';
 
 void main() {
   setUpAll(() async {
@@ -53,6 +54,7 @@ void main() {
     '14_usuarios': '/users',
     '15_perfil': '/profile',
     '16_menu_mas': '/more',
+    '18_modo_oscuro': '/home',
   };
   for (final entry in routes.entries) {
     testWidgets('Captura ${entry.key}', (tester) async {
@@ -75,12 +77,18 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final key = GlobalKey();
+      final store = AppStore();
+      if (entry.key == '18_modo_oscuro') store.toggleDarkMode();
+      if (entry.value == '/users') {
+        await store.signIn('carlos.rojas@example.com', 'admin123');
+      }
       await tester.pumpWidget(
         RepaintBoundary(
           key: key,
-          child: VacunaPlusApp(initialRoute: entry.value),
+          child: VacunaPlusApp(initialRoute: entry.value, store: store),
         ),
       );
+      addTearDown(store.dispose);
       await tester.runAsync(() async {
         if (entry.value == '/')
           await precacheImage(

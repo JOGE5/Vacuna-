@@ -15,23 +15,59 @@ class VaccinationRegistrationScreen extends StatefulWidget {
 class _VaccinationRegistrationScreenState
     extends State<VaccinationRegistrationScreen> {
   final form = GlobalKey<FormState>();
-  final lot = TextEditingController(), notes = TextEditingController();
-  String? campaign, vaccine, dose, center, responsible;
-  DateTime? date, next;
+  final notes = TextEditingController();
+  String? campaign, dose, lot;
+  DateTime? next;
   String query = '';
+  AppStore? store;
+  Appointment? preparedAppointment;
+
   @override
   void dispose() {
-    lot.dispose();
+    store?.cancelAppointmentPreparation(preparedAppointment);
     notes.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = StoreScope.of(context), p = s.selectedPatient;
+    final s = StoreScope.of(context);
+    store = s;
+    preparedAppointment ??= s.selectedAppointment;
+    final p = s.selectedPatient;
+    final active = s.campaigns.where((c) => c.status == 'Activa').toList();
+    final selectedAppointment = s.selectedAppointment;
+    final chosenCampaign =
+        campaign ??
+        (selectedAppointment == null
+            ? null
+            : active
+                      .where(
+                        (c) =>
+                            c.vaccine == selectedAppointment.vaccine &&
+                            c.center == selectedAppointment.center,
+                      )
+                      .firstOrNull
+                      ?.name ??
+                  'Sin campaña');
+    final selected = active.where((c) => c.name == chosenCampaign);
+    final c = selected.isEmpty ? null : selected.first;
+    final targetVaccine = c?.vaccine ?? selectedAppointment?.vaccine;
+    final targetCenter = c?.center ?? selectedAppointment?.center;
+    final lots =
+        targetVaccine == null || targetCenter == null
+              ? <Stock>[]
+              : s.availableStocks
+                    .where(
+                      (e) =>
+                          e.vaccine == targetVaccine &&
+                          e.center == targetCenter,
+                    )
+                    .toList()
+          ..sort((a, b) => a.expiry.compareTo(b.expiry));
     final matches = s.patients.where(
-      (p) =>
-          '${p.name} ${p.document}'.toLowerCase().contains(query.toLowerCase()),
+      (e) =>
+          '${e.name} ${e.document}'.toLowerCase().contains(query.toLowerCase()),
     );
     return PageShell(
       title: 'Registrar vacunación',
@@ -41,13 +77,10 @@ class _VaccinationRegistrationScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Completa los datos para registrar la aplicación.',
-              style: TextStyle(fontSize: 12),
-            ),
+            const Text('Selecciona paciente, campaña, dosis y lote.'),
             gap,
             SearchBox(
-              'Buscar por documento (CI, pasaporte, etc.)',
+              'Buscar por nombre o documento',
               (v) => setState(() => query = v),
             ),
             if (query.isNotEmpty)
@@ -55,11 +88,11 @@ class _VaccinationRegistrationScreenState
                 child: Column(
                   children: matches
                       .map(
-                        (p) => ListTile(
-                          title: Text(p.name),
-                          subtitle: Text(p.document),
+                        (e) => ListTile(
+                          title: Text(e.name),
+                          subtitle: Text(e.document),
                           onTap: () => setState(() {
-                            s.selectedPatient = p;
+                            s.selectedPatient = e;
                             query = '';
                           }),
                         ),
@@ -69,112 +102,71 @@ class _VaccinationRegistrationScreenState
               ),
             if (p != null)
               Panel(
-                child: Row(
-                  children: [
-                    const CircleMark(icon: Icons.person_outline, size: 48),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            p.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Text(p.document),
-                          Text(
-                            'Nacida el ${shortDate(p.birth)}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(p.name),
+                  subtitle: Text(p.document),
                 ),
+              ),
+            if (active.isEmpty)
+              const Notice(
+                'No hay campañas activas hoy. Revisa las fechas de las campañas.',
+                warning: true,
               ),
             Panel(
               child: Column(
                 children: [
-                  const SectionTitle(
-                    'Vacuna y dosis',
-                    Icons.health_and_safety_outlined,
-                  ),
+                  const SectionTitle('Aplicación', Icons.vaccines_outlined),
                   SelectField(
                     'Campaña',
-                    s.campaigns.map((c) => c.name).toList(),
-                    campaign,
-                    (v) => setState(() => campaign = v),
+                    [
+                      if (selectedAppointment != null) 'Sin campaña',
+                      ...active.map((e) => e.name),
+                    ],
+                    chosenCampaign,
+                    (v) => setState(() {
+                      campaign = v;
+                      lot = null;
+                    }),
                   ),
-                  SelectField(
-                    'Vacuna',
-                    s.stocks.map((e) => e.vaccine).toSet().toList(),
-                    vaccine,
-                    (v) => setState(() => vaccine = v),
-                  ),
+                  if (c != null)
+                    Notice(
+                      '${c.vaccine} · ${c.center} · ${shortDate(s.now())}\nResponsable: ${s.currentUser.name}',
+                    ),
+                  if (c == null && selectedAppointment != null)
+                    Notice(
+                      '${selectedAppointment.vaccine} · ${selectedAppointment.center} · ${shortDate(s.now())}',
+                    ),
                   SelectField(
                     'Dosis',
                     const ['Dosis 1', 'Dosis 2', 'Dosis de refuerzo'],
                     dose,
                     (v) => setState(() => dose = v),
                   ),
-                  InputField(
-                    'Lote',
+                  SelectField(
+                    'Lote (vence primero)',
+                    lots
+                        .map(
+                          (e) =>
+                              '${e.lot} · vence ${shortDate(e.expiry)} · ${e.quantity} dosis',
+                        )
+                        .toList(),
                     lot,
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty)
-                        return 'Este campo es obligatorio';
-                      final candidates = s.stocks.where(
-                        (e) =>
-                            e.lot == v.trim() &&
-                            e.vaccine == vaccine &&
-                            e.center == center,
-                      );
-                      if (candidates.isEmpty)
-                        return 'Lote no disponible para esta vacuna y centro';
-                      final stock = candidates.first;
-                      if (stock.quantity <= 0)
-                        return 'No hay dosis disponibles';
-                      if (date != null && stock.expiry.isBefore(date!))
-                        return 'El lote está vencido en la fecha indicada';
-                      return null;
-                    },
+                    (v) => setState(() => lot = v),
+                    key: ValueKey(c?.name),
                   ),
-                ],
-              ),
-            ),
-            Panel(
-              child: Column(
-                children: [
-                  const SectionTitle(
-                    'Datos de aplicación',
-                    Icons.calendar_today_outlined,
-                  ),
-                  DateField(
-                    'Fecha de aplicación',
-                    date,
-                    (v) => setState(() => date = v),
-                    last: DateTime.now(),
-                  ),
-                  SelectField(
-                    'Centro',
-                    s.centers.map((e) => e.name).toList(),
-                    center,
-                    (v) => setState(() => center = v),
-                  ),
-                  SelectField(
-                    'Responsable',
-                    s.users.where((u) => u.active).map((e) => e.name).toList(),
-                    responsible,
-                    (v) => setState(() => responsible = v),
-                  ),
+                  if (targetVaccine != null && lots.isEmpty)
+                    const Notice(
+                      'No hay lotes válidos de esta vacuna en el centro de la campaña.',
+                      warning: true,
+                    ),
                   InputField('Observaciones', notes, lines: 2, validator: null),
                   DateField(
                     'Próxima cita (opcional)',
                     next,
                     (v) => setState(() => next = v),
-                    validator: (_) =>
-                        next != null && date != null && !next!.isAfter(date!)
-                        ? 'La cita debe ser posterior a la aplicación'
+                    validator: (_) => next != null && !next!.isAfter(s.now())
+                        ? 'La cita debe ser posterior a hoy'
                         : null,
                   ),
                 ],
@@ -182,26 +174,35 @@ class _VaccinationRegistrationScreenState
             ),
             ActionButton('Guardar vacunación', () {
               if (!form.currentState!.validate()) return;
-              if (p == null) {
-                toast(context, 'Selecciona un paciente');
+              if (p == null ||
+                  (c == null && selectedAppointment == null) ||
+                  lot == null) {
+                toast(context, 'Selecciona paciente, campaña y lote');
                 return;
               }
-              final c = s.campaigns.firstWhere((c) => c.name == campaign);
-              final stock = s.stocks.firstWhere(
-                (e) =>
-                    e.lot == lot.text.trim() &&
-                    e.vaccine == vaccine &&
-                    e.center == center,
+              if (c != null && c.status != 'Activa') {
+                toast(context, 'La campaña ya no está activa');
+                return;
+              }
+              final stock = lots.firstWhere(
+                (e) => lot!.startsWith('${e.lot} ·'),
               );
+              if (stock.quantity <= 0 ||
+                  s.isExpired(stock) ||
+                  stock.withdrawn) {
+                toast(context, 'El lote ya no está disponible');
+                return;
+              }
               s.addVaccination(
                 Vaccination(
                   p,
-                  vaccine!,
+                  targetVaccine!,
                   dose!,
-                  lot.text.trim(),
-                  date!,
-                  center!,
-                  responsible!,
+                  stock.lot,
+                  s.now(),
+                  targetCenter!,
+                  s.currentUser.name,
+                  campaign: c,
                   next: next,
                   notes: notes.text.trim(),
                 ),

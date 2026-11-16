@@ -36,6 +36,9 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
               const Brand(),
               const Spacer(),
               IconButton(
+                tooltip: tab == 'Activas'
+                    ? 'Mostrar todas las campañas'
+                    : 'Filtrar campañas activas',
                 onPressed: () => setState(
                   () => tab = tab == 'Activas' ? 'Todas' : 'Activas',
                 ),
@@ -80,26 +83,72 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
                           ],
                         ),
                         gap,
-                        Text(
-                          '♧  ${c.vaccine}',
-                          style: const TextStyle(color: muted, fontSize: 12),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.vaccines_outlined,
+                              size: 16,
+                              color: muted,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                c.vaccine,
+                                style: const TextStyle(
+                                  color: muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          '▦  ${dateLabel(c.start)} – ${dateLabel(c.end)}',
-                          style: const TextStyle(color: muted, fontSize: 12),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today_outlined,
+                              size: 16,
+                              color: muted,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                '${dateLabel(c.start)} – ${dateLabel(c.end)}',
+                                style: const TextStyle(
+                                  color: muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          '⌖  ${c.center}',
-                          style: const TextStyle(color: muted, fontSize: 12),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 16,
+                              color: muted,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                c.center,
+                                style: const TextStyle(
+                                  color: muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         Align(
                           alignment: Alignment.centerRight,
-                          child: TextButton(
+                          child: TextButton.icon(
                             onPressed: () {
                               s.selectedCampaign = c;
                               go(context, '/campaign/detail');
                             },
-                            child: const Text('Ver detalle  →'),
+                            label: const Text('Ver detalle'),
+                            icon: const Icon(Icons.arrow_forward, size: 18),
                           ),
                         ),
                       ],

@@ -3,6 +3,7 @@ import '../core/app_store.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import '../widgets/page_shell.dart';
+import '../core/forecasts.dart';
 
 class CampaignDetailScreen extends StatelessWidget {
   const CampaignDetailScreen({super.key});
@@ -10,6 +11,14 @@ class CampaignDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = StoreScope.of(context), c = s.selectedCampaign!;
     final progress = (c.applied / c.goal).clamp(0.0, 1.0);
+    final pace = s.pace(c);
+    final today = dayOf(s.now());
+    final daily = List.generate(14, (i) {
+      final day = today.subtract(Duration(days: 13 - i));
+      return s.vaccinations
+          .where((v) => v.campaign == c && dayOf(v.date) == day)
+          .length;
+    });
     return PageShell(
       back: true,
       title: '',
@@ -34,18 +43,29 @@ class CampaignDetailScreen extends StatelessWidget {
                     gap,
                     StatusBadge(c.status),
                     gap,
-                    Text(
-                      '▦ ${dateLabel(c.start)} – ${dateLabel(c.end)}',
-                      style: const TextStyle(color: muted, fontSize: 12),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_today_outlined,
+                          size: 16,
+                          color: muted,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            '${dateLabel(c.start)} – ${dateLabel(c.end)}',
+                            style: const TextStyle(color: muted, fontSize: 12),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              Image.asset(
+              const ThemeIllustration(
                 'assets/images/vacuna.png',
                 width: 120,
                 height: 140,
-                fit: BoxFit.contain,
               ),
             ],
           ),
@@ -98,6 +118,42 @@ class CampaignDetailScreen extends StatelessWidget {
               ],
             ),
           ),
+          if (c.status == 'Activa')
+            Panel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Ritmo de campaña',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                  gap,
+                  Text(
+                    'Meta diaria: ${pace.dailyGoal} dosis · Promedio real (7 días): ${pace.dailyAverage.toStringAsFixed(1).replaceAll('.', ',')} dosis',
+                  ),
+                  Text(
+                    pace.onTrack ? 'Al día' : 'Atrasada',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      // Rojo de advertencia (6,5:1 sobre blanco), el mismo de los lotes vencidos.
+                      color: pace.onTrack ? green : const Color(0xFFB3261E),
+                    ),
+                  ),
+                  Text(
+                    pace.estimatedFinish == null || !pace.onTrack
+                        ? 'No se alcanza antes del cierre'
+                        : 'Meta estimada: ${shortDate(pace.estimatedFinish!)}',
+                  ),
+                  gap,
+                  const Text('Dosis por día, últimos 14 días'),
+                  _DailyBars(values: daily, goal: pace.dailyGoal),
+                  const Text(
+                    'Línea: meta diaria',
+                    style: TextStyle(color: muted, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
           ActionButton(
             'Registrar vacunación',
             () => go(context, '/vaccination'),
@@ -109,13 +165,6 @@ class CampaignDetailScreen extends StatelessWidget {
             () => go(context, '/campaign/edit'),
             icon: Icons.edit_outlined,
             outlined: true,
-          ),
-          gap,
-          const Center(
-            child: Text(
-              '◷ Última actualización: 5 oct 2026, 14:32',
-              style: TextStyle(color: muted, fontSize: 11),
-            ),
           ),
         ],
       ),
@@ -138,4 +187,49 @@ class CampaignDetailScreen extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _DailyBars extends StatelessWidget {
+  const _DailyBars({required this.values, required this.goal});
+  final List<int> values;
+  final int goal;
+  @override
+  Widget build(BuildContext context) {
+    final maxValue = [goal, ...values, 1].reduce((a, b) => a > b ? a : b);
+    return SizedBox(
+      height: 110,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final height = constraints.maxHeight;
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (final value in values)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Container(
+                            height: height * value / maxValue,
+                            color: green,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: height * goal / maxValue,
+                child: const Divider(color: muted, thickness: 2, height: 2),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }

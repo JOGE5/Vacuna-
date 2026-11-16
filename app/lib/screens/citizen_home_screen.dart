@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/app_store.dart';
 import '../core/theme.dart';
@@ -16,27 +17,41 @@ class CitizenHomeScreen extends StatefulWidget {
 
 class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
   String vaccine = 'Todas';
+  late final Timer clock;
+
+  @override
+  void initState() {
+    super.initState();
+    clock = Timer.periodic(const Duration(minutes: 1), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    clock.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = StoreScope.of(context);
-    final available = s.stocks
-        .where((e) => e.quantity > 0)
-        .map((e) => e.vaccine)
-        .toSet();
+    final available = s.availableStocks.map((e) => e.vaccine).toSet();
     final centers = s.centers
         .where(
           (c) =>
               vaccine == 'Todas' ||
-              s.stocks.any(
-                (e) =>
-                    e.center == c.name &&
-                    e.vaccine == vaccine &&
-                    e.quantity > 0,
+              s.availableStocks.any(
+                (e) => e.center == c.name && e.vaccine == vaccine,
               ),
         )
         .toList();
     final campaigns =
-        s.campaigns.where((e) => e.status != 'Finalizada').toList()
+        s.campaigns
+            .where(
+              (e) =>
+                  e.status != 'Finalizada' &&
+                  (vaccine == 'Todas' || e.vaccine == vaccine),
+            )
+            .toList()
           ..sort((a, b) => a.start.compareTo(b.start));
     void openCenter(String name) {
       final found = s.centers.where((c) => c.name == name);
@@ -72,8 +87,8 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
             s.isGuest || !s.signedIn
                 ? 'Hola, invitado'
                 : 'Hola, ${s.currentUser.name.split(' ').first}',
-            open: s.centers.where((c) => c.open).length,
-            active: campaigns.length,
+            open: s.centers.where((c) => c.isOpenAt(s.now())).length,
+            active: campaigns.where((e) => e.status == 'Activa').length,
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -105,16 +120,22 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
           CentersMap(
             centers: centers,
             height: 300,
+            interactive: false,
             onSelect: (c) => showCenterSheet(context, s, c),
           ),
           const SizedBox(height: 8),
-          const Row(
-            children: [
-              Icon(Icons.location_on, color: green, size: 18),
-              Text(' Abierto   ', style: TextStyle(fontSize: 12)),
-              Icon(Icons.location_on, color: muted, size: 18),
-              Text(' Cerrado', style: TextStyle(fontSize: 12)),
-            ],
+          const _MapLegend(),
+          const SizedBox(height: 8),
+          ActionButton(
+            'Ver mapa completo',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => _FullMapScreen(centers: centers),
+              ),
+            ),
+            icon: Icons.map_outlined,
+            outlined: true,
           ),
           if (centers.isEmpty)
             const Padding(
@@ -122,13 +143,17 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
               child: Notice('No hay centros con esa vacuna disponible.'),
             ),
           const SizedBox(height: 16),
-          const SectionTitle('Campañas vigentes', Icons.campaign_outlined),
-          if (campaigns.isEmpty) const Notice('No hay campañas vigentes.'),
+          const SectionTitle(
+            'Campañas activas y próximas',
+            Icons.campaign_outlined,
+          ),
+          if (campaigns.isEmpty)
+            const Notice('No hay campañas activas ni próximas.'),
           for (final e in campaigns) _campaign(e, () => openCenter(e.center)),
           const SizedBox(height: 6),
           const SectionTitle('Centros', Icons.local_hospital_outlined),
           for (final c in centers)
-            _center(c, () => showCenterSheet(context, s, c)),
+            _center(c, s, () => showCenterSheet(context, s, c)),
           const Notice(
             'Centros y campañas se consultan sin internet. El mapa muestra las zonas que ya abriste.',
           ),
@@ -137,68 +162,75 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     );
   }
 
-  Widget _hero(String greeting, {required int open, required int active}) =>
-      Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [green, Color(0xFF0E9F8A)],
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x3316804A),
-              blurRadius: 18,
-              offset: Offset(0, 8),
-            ),
-          ],
+  Widget _hero(
+    String greeting, {
+    required int open,
+    required int active,
+  }) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(20),
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [green, Color(0xFF0E9F8A)],
+      ),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x3316804A),
+          blurRadius: 18,
+          offset: Offset(0, 8),
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      ],
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(greeting, style: const TextStyle(color: Colors.white)),
+              const SizedBox(height: 4),
+              const Text(
+                'Encuentra dónde vacunarte',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
                 children: [
-                  Text(greeting, style: const TextStyle(color: Colors.white)),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Encuentra dónde vacunarte',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  _pill(
+                    '$open ${open == 1 ? 'centro abierto' : 'centros abiertos'}',
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      _pill('$open centros abiertos'),
-                      _pill('$active campañas vigentes'),
-                    ],
+                  _pill(
+                    '$active ${active == 1 ? 'campaña activa' : 'campañas activas'}',
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 12),
-            // La ilustración tiene fondo blanco: va en su propia tarjeta.
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.asset('assets/images/vacuna.png', height: 72),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      );
+        const SizedBox(width: 12),
+        // La ilustración tiene fondo blanco: va en su propia tarjeta.
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.asset('assets/images/vacuna.png', height: 72),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _pill(String text) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -268,7 +300,7 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
     ),
   );
 
-  Widget _center(VaccinationCenter c, VoidCallback onTap) => Panel(
+  Widget _center(VaccinationCenter c, AppStore s, VoidCallback onTap) => Panel(
     child: InkWell(
       onTap: onTap,
       child: Row(
@@ -291,12 +323,57 @@ class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
                   style: const TextStyle(color: muted, fontSize: 12),
                 ),
                 _meta(Icons.schedule, c.hours),
+                if (c.isOpenAt(s.now()))
+                  _meta(
+                    Icons.access_time,
+                    'Espera estimada: ~${s.estimatedWait(c)} min',
+                  ),
               ],
             ),
           ),
-          StatusBadge(c.open ? 'Abierto' : 'Cerrado'),
+          StatusBadge(c.isOpenAt(s.now()) ? 'Abierto' : 'Cerrado'),
         ],
       ),
     ),
   );
+}
+
+class _MapLegend extends StatelessWidget {
+  const _MapLegend();
+  @override
+  Widget build(BuildContext context) => const Row(
+    children: [
+      Icon(Icons.location_on, color: green, size: 18),
+      Text(' Abierto   ', style: TextStyle(fontSize: 12)),
+      Icon(Icons.location_on, color: muted, size: 18),
+      Text(' Cerrado', style: TextStyle(fontSize: 12)),
+    ],
+  );
+}
+
+class _FullMapScreen extends StatelessWidget {
+  const _FullMapScreen({required this.centers});
+  final List<VaccinationCenter> centers;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = StoreScope.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Mapa completo')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: CentersMap(
+                centers: centers,
+                expand: true,
+                onSelect: (c) => showCenterSheet(context, s, c),
+              ),
+            ),
+            const Padding(padding: EdgeInsets.all(12), child: _MapLegend()),
+          ],
+        ),
+      ),
+    );
+  }
 }

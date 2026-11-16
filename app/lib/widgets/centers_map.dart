@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -6,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/app_store.dart';
 import '../core/theme.dart';
 import '../models/entities.dart';
+import '../screens/booking_screen.dart';
 import 'common.dart';
 import 'page_shell.dart';
 
@@ -25,6 +27,7 @@ const laPaz = LatLng(-16.5000, -68.1193);
 const _noRotation = InteractionOptions(
   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
 );
+const _previewInteraction = InteractionOptions(flags: InteractiveFlag.none);
 
 /// Crea el proveedor de mosaicos. Las zonas vistas se guardan en el teléfono y
 /// se consideran vigentes 30 días, así el mapa se ve sin internet (la política
@@ -72,7 +75,7 @@ class _Attribution extends StatelessWidget {
         ),
         child: const Text(
           '© OpenStreetMap contributors',
-          style: TextStyle(fontSize: 10, color: ink),
+          style: TextStyle(fontSize: 12, color: ink),
         ),
       ),
     ),
@@ -87,10 +90,14 @@ class CentersMap extends StatefulWidget {
     required this.centers,
     required this.onSelect,
     this.height = 320,
+    this.expand = false,
+    this.interactive = true,
   });
   final List<VaccinationCenter> centers;
   final ValueChanged<VaccinationCenter> onSelect;
   final double height;
+  final bool expand;
+  final bool interactive;
   @override
   State<CentersMap> createState() => _CentersMapState();
 }
@@ -99,6 +106,21 @@ class _CentersMapState extends State<CentersMap> {
   final controller = MapController();
   late final tiles = mapTileProvider();
   bool offline = false;
+  bool ready = false;
+  Size? mapSize;
+  late final Timer clock;
+
+  @override
+  void initState() {
+    super.initState();
+    clock = Timer.periodic(const Duration(minutes: 1), (_) => setState(() {}));
+  }
+
+  void _scheduleFit() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ready && _fit != null) controller.fitCamera(_fit!);
+    });
+  }
 
   List<LatLng> _points(List<VaccinationCenter> centers) => [
     for (final c in centers) LatLng(c.lat, c.lng),
@@ -118,28 +140,29 @@ class _CentersMapState extends State<CentersMap> {
   @override
   void didUpdateWidget(CentersMap old) {
     super.didUpdateWidget(old);
-    final fit = _fit;
-    if (fit != null &&
-        !listEquals(_points(old.centers), _points(widget.centers))) {
+    if (!listEquals(_points(old.centers), _points(widget.centers))) {
       // Se reencuadra en vez de recrear el mapa: TileLayer libera su proveedor.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) controller.fitCamera(fit);
-      });
+      _scheduleFit();
     }
   }
 
   @override
   void dispose() {
+    clock.cancel();
     controller.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      SizedBox(
-        height: widget.height,
-        child: ClipRRect(
+  Widget build(BuildContext context) {
+    final map = LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+        if (size != mapSize && size.isFinite && !size.isEmpty) {
+          mapSize = size;
+          if (ready) _scheduleFit();
+        }
+        return ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: FlutterMap(
             mapController: controller,
@@ -147,7 +170,15 @@ class _CentersMapState extends State<CentersMap> {
               initialCenter: laPaz,
               initialZoom: 12.5,
               initialCameraFit: _fit,
-              interactionOptions: _noRotation,
+              onMapReady: () {
+                ready = true;
+                // onMapReady llega después del primer diseño del mapa.
+                // Ajustar aquí evita depender de un fotograma adicional.
+                if (_fit != null) controller.fitCamera(_fit!);
+              },
+              interactionOptions: widget.interactive
+                  ? _noRotation
+                  : _previewInteraction,
             ),
             children: [
               TileLayer(
@@ -163,7 +194,7 @@ class _CentersMapState extends State<CentersMap> {
                   for (final c in widget.centers)
                     _pin(
                       LatLng(c.lat, c.lng),
-                      open: c.open,
+                      open: c.isOpenAt(StoreScope.of(context).now()),
                       onTap: () => widget.onSelect(c),
                     ),
                 ],
@@ -171,19 +202,27 @@ class _CentersMapState extends State<CentersMap> {
               const _Attribution(),
             ],
           ),
-        ),
-      ),
-      // Debajo del mapa: encima taparía los marcadores de la parte superior.
-      if (offline)
-        const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Notice(
-            'Sin conexión: se ven los centros y las zonas del mapa ya guardadas.',
-            warning: true,
+        );
+      },
+    );
+    return Column(
+      children: [
+        if (widget.expand)
+          Expanded(child: map)
+        else
+          SizedBox(height: widget.height, child: map),
+        // Debajo del mapa: encima taparía los marcadores de la parte superior.
+        if (offline)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Notice(
+              'Sin conexión: se ven los centros y las zonas del mapa ya guardadas.',
+              warning: true,
+            ),
           ),
-        ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 /// Abre una pantalla para marcar en el mapa dónde está un centro.
@@ -257,18 +296,26 @@ Future<void> showCenterSheet(
   AppStore s,
   VaccinationCenter c,
 ) {
+  final now = s.now();
+  final isOpen = c.isOpenAt(now);
+  final nextOpening = c.nextOpeningAt(now);
+  final status = isOpen
+      ? 'Abierto ahora · cierra a las ${_hour(c.closesAt)}'
+      : nextOpening == null
+      ? 'Cerrado · horario no disponible'
+      : 'Cerrado · abre ${_day(nextOpening)} a las ${_hour(c.opensAt)}';
   final campaigns = s.campaigns.where(
     (e) => e.center == c.name && e.status != 'Finalizada',
   );
-  final vaccines = s.stocks
-      .where((e) => e.center == c.name && e.quantity > 0)
+  final vaccines = s.availableStocks
+      .where((e) => e.center == c.name)
       .map((e) => e.vaccine)
       .toSet();
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    backgroundColor: Colors.white,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     builder: (_) => SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -289,13 +336,15 @@ Future<void> showCenterSheet(
                     ),
                   ),
                 ),
-                StatusBadge(c.open ? 'Abierto' : 'Cerrado'),
+                StatusBadge(isOpen ? 'Abierto' : 'Cerrado'),
               ],
             ),
             gap,
             for (final (icon, text) in [
               (Icons.place_outlined, c.address),
               (Icons.schedule, c.hours),
+              (Icons.access_time, status),
+              (Icons.phone_outlined, c.phone),
             ])
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
@@ -310,6 +359,8 @@ Future<void> showCenterSheet(
                 ),
               ),
             gap,
+            if (isOpen) Text('Espera estimada: ~${s.estimatedWait(c)} min'),
+            if (isOpen) gap,
             const Text(
               'Campañas',
               style: TextStyle(fontWeight: FontWeight.bold),
@@ -322,7 +373,7 @@ Future<void> showCenterSheet(
               ),
             for (final e in campaigns)
               Text(
-                '• ${e.name} · ${e.vaccine} · ${dateLabel(e.start)} – ${dateLabel(e.end)}',
+                '• ${e.name} · ${e.vaccine} · ${e.target} · ${dateLabel(e.start)} – ${dateLabel(e.end)}',
               ),
             gap,
             const Text(
@@ -342,15 +393,65 @@ Future<void> showCenterSheet(
             ),
             gap,
             ActionButton(
+              'Reservar turno',
+              vaccines.isEmpty
+                  ? null
+                  : () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => BookingScreen(center: c),
+                        ),
+                      );
+                    },
+              icon: Icons.event_available_outlined,
+            ),
+            gap,
+            ActionButton(
               'Cómo llegar',
               () => openDirections(context, c),
               icon: Icons.directions_outlined,
+            ),
+            gap,
+            ActionButton(
+              'Llamar',
+              () => callCenter(context, c),
+              icon: Icons.phone_outlined,
+              outlined: true,
             ),
           ],
         ),
       ),
     ),
   );
+}
+
+String _hour(int minutes) =>
+    '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
+
+String _day(DateTime date) => [
+  'lunes',
+  'martes',
+  'miércoles',
+  'jueves',
+  'viernes',
+  'sábado',
+  'domingo',
+][date.weekday - 1];
+
+Future<void> callCenter(BuildContext context, VaccinationCenter c) async {
+  var opened = false;
+  try {
+    opened = await launchUrl(
+      Uri(scheme: 'tel', path: c.phone.replaceAll(' ', '')),
+    );
+  } catch (_) {
+    // El dispositivo puede no tener una aplicación para llamar.
+  }
+  if (!opened && context.mounted) {
+    toast(context, 'No se pudo llamar. Número: ${c.phone}');
+  }
 }
 
 /// Ruta en Google Maps hasta el centro. Los enlaces de Google Maps no

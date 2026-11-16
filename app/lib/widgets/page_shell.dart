@@ -1,5 +1,21 @@
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
+import '../core/app_store.dart';
+
+class ThemeToggle extends StatelessWidget {
+  const ThemeToggle({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    return IconButton(
+      tooltip: store.darkMode ? 'Activar modo claro' : 'Activar modo oscuro',
+      onPressed: store.toggleDarkMode,
+      icon: Icon(
+        store.darkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+      ),
+    );
+  }
+}
 
 class PageShell extends StatelessWidget {
   const PageShell({
@@ -23,23 +39,27 @@ class PageShell extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 540),
           child: Column(
             children: [
-              if (title != null)
+              if (title != null || navIndex == null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
                   child: Row(
                     children: [
                       if (back)
                         IconButton(
+                          tooltip: 'Volver',
                           onPressed: () => Navigator.maybePop(context),
                           icon: const Icon(Icons.arrow_back, color: green),
                         ),
                       Expanded(
-                        child: Text(
-                          title!,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
+                        child: title == null
+                            ? const SizedBox.shrink()
+                            : Text(
+                                title!,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
                       ),
                       ...actions,
+                      if (navIndex == null) const ThemeToggle(),
                     ],
                   ),
                 ),
@@ -69,45 +89,48 @@ class _BottomNav extends StatelessWidget {
     ),
     padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
     child: Row(
-      children: List.generate(
-        4,
-        (i) => Expanded(
-          child: InkWell(
-            onTap: () {
-              final route = ['/home', '/campaigns', '/patients', '/more'][i];
-              Navigator.pushNamedAndRemoveUntil(context, route, (r) => false);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: index == i ? mint : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    [
-                      Icons.home_outlined,
-                      Icons.campaign_outlined,
-                      Icons.people_outline,
-                      Icons.more_horiz,
-                    ][i],
-                    color: index == i ? green : muted,
-                  ),
-                  Text(
-                    ['Inicio', 'Campañas', 'Pacientes', 'Más'][i],
-                    style: TextStyle(
-                      fontSize: 11,
+      children: [
+        ...List.generate(
+          4,
+          (i) => Expanded(
+            child: InkWell(
+              onTap: () {
+                final route = ['/home', '/campaigns', '/patients', '/more'][i];
+                Navigator.pushNamedAndRemoveUntil(context, route, (r) => false);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: index == i ? mint : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      [
+                        Icons.home_outlined,
+                        Icons.campaign_outlined,
+                        Icons.people_outline,
+                        Icons.more_horiz,
+                      ][i],
                       color: index == i ? green : muted,
                     ),
-                  ),
-                ],
+                    Text(
+                      ['Inicio', 'Campañas', 'Pacientes', 'Más'][i],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: index == i ? green : muted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+        const ThemeToggle(),
+      ],
     ),
   );
 }

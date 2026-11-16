@@ -3,13 +3,23 @@ import '../core/app_store.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import '../widgets/page_shell.dart';
-import '../widgets/charts.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
   @override
   Widget build(BuildContext context) {
     final s = StoreScope.of(context);
+    final now = s.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final todayCount = s.vaccinations
+        .where((v) => DateTime(v.date.year, v.date.month, v.date.day) == today)
+        .length;
+    final pending = s.vaccinations
+        .where((v) => v.next != null && !v.next!.isBefore(today))
+        .length;
+    final upcoming = s.campaigns.where((c) => c.status == 'Próxima').toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+    final alerts = s.lowStockCount + s.expiringStockCount;
     return PageShell(
       navIndex: 0,
       child: Column(
@@ -30,12 +40,15 @@ class DashboardScreen extends StatelessWidget {
               ),
               const Spacer(),
               IconButton(
+                tooltip: 'Ver alertas',
                 onPressed: () => showDialog<void>(
                   context: context,
                   builder: (c) => AlertDialog(
                     title: const Text('Notificaciones'),
-                    content: const Text(
-                      '• Próxima campaña: Refuerzo infantil\n• Existencias bajas: SRP\n• Lote SRP-2602 próximo a vencer',
+                    content: Text(
+                      alerts == 0
+                          ? 'No hay alertas de inventario.'
+                          : 'Existencias bajas: ${s.lowStockCount}\nLotes por vencer: ${s.expiringStockCount}',
                     ),
                     actions: [
                       TextButton(
@@ -47,63 +60,76 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 icon: const Icon(Icons.notifications_none),
               ),
-              const StatusBadge('3 nuevas'),
+              StatusBadge(
+                alerts == 0
+                    ? 'Sin alertas'
+                    : '$alerts ${alerts == 1 ? 'alerta' : 'alertas'}',
+              ),
             ],
           ),
           gap,
-          Panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Vacunaciones realizadas hoy',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                gap,
-                Row(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${48 + s.vaccinations.length - 2}',
-                          style: const TextStyle(
-                            fontSize: 48,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const Text(
-                          '↑ +12% frente a ayer',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: green,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+          SizedBox(
+            width: double.infinity,
+            child: Panel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Vacunaciones realizadas hoy',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  gap,
+                  Text(
+                    '$todayCount',
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w900,
                     ),
-                    const SizedBox(width: 20),
-                    const Expanded(child: TrendChart()),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () => go(context, '/turnos'),
+            child: Panel(
+              child: Row(
+                children: [
+                  const CircleMark(icon: Icons.event_available_outlined),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Turnos de hoy: ${s.todayAppointments.length}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
             ),
           ),
           Row(
             children: [
               _stat(
-                '${6 + s.campaigns.length - 3}',
+                '${s.campaigns.where((c) => c.status == 'Activa').length}',
                 'campañas\nactivas',
                 Icons.campaign_outlined,
               ),
               const SizedBox(width: 8),
               _stat(
-                '${1248 + s.patients.length - 3}',
+                '${s.patients.length}',
                 'pacientes\nregistrados',
                 Icons.people_outline,
               ),
               const SizedBox(width: 8),
-              _stat('14', 'citas\npendientes', Icons.calendar_month_outlined),
+              _stat(
+                '$pending',
+                'citas\npendientes',
+                Icons.calendar_month_outlined,
+              ),
             ],
           ),
           Row(
@@ -126,44 +152,45 @@ class DashboardScreen extends StatelessWidget {
             ],
           ),
           gap,
-          InkWell(
-            onTap: () {
-              s.selectedCampaign = s.campaigns[1];
-              go(context, '/campaign/detail');
-            },
-            child: const Panel(
-              child: Row(
-                children: [
-                  CircleMark(icon: Icons.vaccines_outlined, size: 54),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Próxima campaña',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          'Refuerzo infantil',
-                          style: TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.bold,
+          if (upcoming.isNotEmpty)
+            InkWell(
+              onTap: () {
+                s.selectedCampaign = upcoming.first;
+                go(context, '/campaign/detail');
+              },
+              child: Panel(
+                child: Row(
+                  children: [
+                    const CircleMark(icon: Icons.vaccines_outlined, size: 54),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Próxima campaña',
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          '18 oct 2026 · Centro Norte',
-                          style: TextStyle(fontSize: 11, color: muted),
-                        ),
-                      ],
+                          Text(
+                            upcoming.first.name,
+                            style: const TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${dateLabel(upcoming.first.start)} · ${upcoming.first.center}',
+                            style: const TextStyle(fontSize: 12, color: muted),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  StatusBadge('Próxima'),
-                ],
+                    const StatusBadge('Próxima'),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -186,7 +213,7 @@ class DashboardScreen extends StatelessWidget {
           Text(
             label,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11, color: muted),
+            style: const TextStyle(fontSize: 12, color: muted),
           ),
         ],
       ),

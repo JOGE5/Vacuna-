@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/app_store.dart';
+import '../models/entities.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
@@ -17,22 +18,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     final s = StoreScope.of(context);
-    final filtered =
-        period != 'Período' || campaign != 'Campaña' || center != 'Centro';
-    final rows = s.vaccinations.where(
-      (v) =>
-          (period != 'Este mes' || v.date.year == 2026 && v.date.month == 10) &&
-          (center == 'Centro' || v.center == center) &&
-          (campaign == 'Campaña' ||
-              v.vaccine.contains(
-                s.campaigns
-                    .firstWhere((c) => c.name == campaign)
-                    .vaccine
-                    .split(' ')
-                    .first,
-              )),
-    );
-    final total = filtered ? rows.length : 480 + s.vaccinations.length - 2;
+    final now = DateTime.now();
+    final rows = s.vaccinations
+        .where(
+          (v) =>
+              (period != 'Este mes' ||
+                  v.date.year == now.year && v.date.month == now.month) &&
+              (center == 'Centro' || v.center == center) &&
+              (campaign == 'Campaña' || v.campaign?.name == campaign),
+        )
+        .toList();
+    final total = rows.length;
+    final campaignCount = rows
+        .map((v) => v.campaign)
+        .whereType<Campaign>()
+        .toSet()
+        .length;
+    final weeks = List<int>.filled(4, 0);
+    final firstDay = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 27));
+    for (final v in rows) {
+      final day = DateTime(v.date.year, v.date.month, v.date.day);
+      final offset = day.difference(firstDay).inDays;
+      if (offset >= 0 && offset < 28) weeks[offset ~/ 7]++;
+    }
     return PageShell(
       title: 'Reportes',
       back: true,
@@ -80,17 +92,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
               _stat('$total', 'Dosis aplicadas', Icons.vaccines_outlined),
               const SizedBox(width: 8),
               _stat(
-                '${filtered ? rows.map((v) => v.patient).toSet().length : 420}',
+                '${rows.map((v) => v.patient).toSet().length}',
                 'Personas atendidas',
                 Icons.person_outline,
               ),
               const SizedBox(width: 8),
               _stat(
-                '${filtered
-                    ? campaign == 'Campaña'
-                          ? 0
-                          : 1
-                    : 6}',
+                '$campaignCount',
                 'Campañas realizadas',
                 Icons.health_and_safety_outlined,
               ),
@@ -104,22 +112,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   children: [
                     const Expanded(
                       child: Text(
-                        'Dosis por semana',
+                        'Dosis en las últimas 4 semanas',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
                       ),
                     ),
-                    Text('Total: $total', style: const TextStyle(fontSize: 12)),
+                    Text(
+                      'Total: ${weeks.fold<int>(0, (a, b) => a + b)}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ],
                 ),
                 gap,
-                WeeklyBars(
-                  values: filtered
-                      ? [0, 0, 0, rows.length]
-                      : const [100, 120, 110, 150],
-                ),
+                if (weeks.every((n) => n == 0))
+                  const Notice('Sin dosis registradas en las últimas 4 semanas')
+                else
+                  WeeklyBars(values: weeks),
               ],
             ),
           ),
@@ -142,44 +152,53 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ],
                 ),
                 gap,
-                ...['Influenza', 'COVID-19', 'SRP'].asMap().entries.map((e) {
-                  final count = filtered
-                      ? rows.where((v) => v.vaccine.startsWith(e.value)).length
-                      : [240, 160, 80][e.key];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 75,
-                          child: Text(
-                            e.value,
-                            style: const TextStyle(fontSize: 12),
-                          ),
+                ...rows
+                    .map((v) => v.vaccine)
+                    .toSet()
+                    .toList()
+                    .asMap()
+                    .entries
+                    .map((e) {
+                      final count = rows
+                          .where((v) => v.vaccine == e.value)
+                          .length;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 75,
+                              child: Text(
+                                e.value,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            Expanded(
+                              child: LinearProgressIndicator(
+                                value: total == 0
+                                    ? 0
+                                    : (count / total).clamp(0.0, 1.0),
+                                minHeight: 10,
+                                color: [
+                                  ink,
+                                  green,
+                                  const Color(0xFF9BD3BC),
+                                ][e.key % 3],
+                                backgroundColor: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              '$count',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
                         ),
-                        Expanded(
-                          child: LinearProgressIndicator(
-                            value: total == 0
-                                ? 0
-                                : (count / total).clamp(0.0, 1.0),
-                            minHeight: 10,
-                            color: [ink, green, const Color(0xFF9BD3BC)][e.key],
-                            backgroundColor: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Text('$count', style: const TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  );
-                }),
+                      );
+                    }),
               ],
             ),
           ),
-          if (filtered)
-            const Notice(
-              'Los filtros consultan los registros de esta demostración. El resumen inicial reproduce las cifras del mockup.',
-            ),
         ],
       ),
     );
@@ -203,7 +222,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Text(
             label,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),
